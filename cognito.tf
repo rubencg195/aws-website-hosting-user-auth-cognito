@@ -1,9 +1,4 @@
-# Local values for configuration
-locals {
-  project_name = "react-auth-demo"
-  environment  = "dev"
-  aws_region  = "us-east-1"
-}
+
 
 # Cognito User Pool
 resource "aws_cognito_user_pool" "main" {
@@ -79,20 +74,3 @@ resource "aws_cognito_user_pool_domain" "main" {
 data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
-
-# Output information (using locals for display)
-locals {
-  # Display information after deployment
-  deployment_info = {
-    project_name           = local.project_name
-    environment           = local.environment
-    aws_region           = local.aws_region
-    aws_account_id       = data.aws_caller_identity.current.account_id
-    cognito_user_pool_id = aws_cognito_user_pool.main.id
-    cognito_client_id    = aws_cognito_user_pool_client.main.id
-    cognito_domain       = aws_cognito_user_pool_domain.main.domain
-    amplify_app_id       = aws_amplify_app.main.id
-    amplify_app_url      = "https://${aws_amplify_app.main.default_domain}"
-    amplify_branch_url   = "https://${aws_amplify_branch.main.branch_name}.${aws_amplify_app.main.default_domain}"
-  }
-}
