@@ -37,4 +37,12 @@ locals {
     amplify_app_url      = "https://main.${aws_amplify_app.main.id}.amplifyapp.com"
     amplify_branch_url   = "https://main.${aws_amplify_app.main.id}.amplifyapp.com"
   }
+  
+  # URLs for Cognito configuration (updated with actual deployment URLs)
+  cognito_urls = {
+    localhost_https = "https://localhost:3000"
+    localhost_http  = "http://localhost:3000"
+    cloudfront      = "https://d1d7szxa9u3zw7.cloudfront.net"
+    amplify         = "https://main.d2ftbks7u75e5p.amplifyapp.com"
+  }
 }

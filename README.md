@@ -114,7 +114,35 @@ tofu apply -auto-approve
 
 **Environment variables are automatically configured** in the deployed application.
 
-### 6. Destroy Infrastructure (Optional)
+### 6. Update Cognito URLs (Important!)
+
+After the initial deployment, you need to update the Cognito callback and logout URLs to include your actual CloudFront and Amplify URLs:
+
+1. **Get your URLs from the deployment output:**
+   ```bash
+   tofu output
+   ```
+
+2. **Update the URLs in `locals.tf`:**
+   ```hcl
+   cognito_urls = {
+     localhost_https = "https://localhost:3000"
+     localhost_http  = "http://localhost:3000"
+     cloudfront      = "https://YOUR_ACTUAL_CLOUDFRONT_URL"  # Update this
+     amplify         = "https://main.YOUR_AMPLIFY_APP_ID.amplifyapp.com"  # Update this
+   }
+   ```
+
+3. **Apply the URL updates:**
+   ```bash
+   tofu apply -auto-approve
+   ```
+
+**Why this step is needed:** Cognito needs to know which URLs are allowed for authentication callbacks. The initial deployment uses localhost placeholders to avoid circular dependencies.
+
+**Current Status:** Your Cognito User Pool Client is configured with localhost URLs only. Authentication will work locally but will fail from CloudFront and Amplify until you update these URLs.
+
+### 7. Destroy Infrastructure (Optional)
 
 When you're done with the demo, you can destroy the infrastructure to avoid ongoing AWS charges:
 
@@ -552,6 +580,7 @@ If authentication doesn't work:
 2. **Check Cognito User Pool** is active in AWS Console
 3. **Verify callback URLs** include `http://localhost:3000`
 4. **Check environment variables** in the deployed application
+5. **Ensure Cognito URLs are updated** with actual CloudFront and Amplify URLs (see step 6 in deployment)
 
 ### Local Development Issues
 

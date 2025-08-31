@@ -44,8 +44,18 @@ resource "aws_cognito_user_pool_client" "main" {
     "ALLOW_USER_SRP_AUTH"
   ]
 
-  callback_urls = ["https://localhost:3000", "http://localhost:3000"]
-  logout_urls   = ["https://localhost:3000", "http://localhost:3000"]
+  callback_urls = [
+    local.cognito_urls.localhost_https,
+    local.cognito_urls.localhost_http,
+    local.cognito_urls.cloudfront,
+    local.cognito_urls.amplify
+  ]
+  logout_urls   = [
+    local.cognito_urls.localhost_https,
+    local.cognito_urls.localhost_http,
+    local.cognito_urls.cloudfront,
+    local.cognito_urls.amplify
+  ]
 
   supported_identity_providers = ["COGNITO"]
 
