@@ -8,20 +8,42 @@ locals {
   
   # MIME types for proper content serving
   mime_types = {
-    "html" = "text/html"
-    "css"  = "text/css"
-    "js"   = "application/javascript"
-    "json" = "application/json"
+    # HTML and text files
+    "html" = "text/html; charset=utf-8"
+    "htm"  = "text/html; charset=utf-8"
+    "css"  = "text/css; charset=utf-8"
+    "js"   = "application/javascript; charset=utf-8"
+    "jsx"  = "application/javascript; charset=utf-8"
+    "ts"   = "application/typescript; charset=utf-8"
+    "tsx"  = "application/typescript; charset=utf-8"
+    
+    # Data files
+    "json" = "application/json; charset=utf-8"
+    "xml"  = "application/xml; charset=utf-8"
+    "txt"  = "text/plain; charset=utf-8"
+    
+    # Images
     "png"  = "image/png"
     "jpg"  = "image/jpeg"
     "jpeg" = "image/jpeg"
     "gif"  = "image/gif"
     "svg"  = "image/svg+xml"
     "ico"  = "image/x-icon"
-    "woff" = "font/woff"
+    "webp" = "image/webp"
+    "bmp"  = "image/bmp"
+    
+    # Fonts
+    "woff"  = "font/woff"
     "woff2" = "font/woff2"
-    "ttf"  = "font/ttf"
-    "eot"  = "application/vnd.ms-fontobject"
+    "ttf"   = "font/ttf"
+    "otf"   = "font/otf"
+    "eot"   = "application/vnd.ms-fontobject"
+    
+    # Archives and other
+    "zip"  = "application/zip"
+    "pdf"  = "application/pdf"
+    "mp4"  = "video/mp4"
+    "webm" = "video/webm"
   }
   
   # Display information after deployment
@@ -43,6 +65,6 @@ locals {
     localhost_https = "https://localhost:3000"
     localhost_http  = "http://localhost:3000"
     cloudfront      = "https://d1d7szxa9u3zw7.cloudfront.net"
-    amplify         = "https://main.d2ftbks7u75e5p.amplifyapp.com"
+    amplify         = "https://main.d1bk1t4l23zi6w.amplifyapp.com"
   }
 }

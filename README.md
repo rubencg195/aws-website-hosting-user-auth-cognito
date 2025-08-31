@@ -23,6 +23,7 @@ This project demonstrates a complete React.js application with authentication ha
   - S3 + CloudFront with local build automation
 - **Automated build and deployment** via OpenTofu local-exec
 - **S3 static website hosting** with CloudFront CDN
+- **Enhanced file handling** with proper MIME types and content validation
 - Infrastructure as Code with OpenTofu
 - **Local development and testing** with proper debugging
 

@@ -1,7 +1,8 @@
 # Amplify App
 resource "aws_amplify_app" "main" {
   name = "${local.project_name}-${local.environment}"
-
+  # S3 does not work as a repository, it can't be used to connect to GitHub
+  # repository = aws_s3_bucket.website.arn # Use the S3 bucket ARN as the repository
   # Repository configuration (optional - for documentation)
   description = "React Authentication Demo with AWS Cognito and Amplify"
 
