@@ -84,8 +84,8 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
       # Copy build files to deployment directory
       Copy-Item -Recurse "build/*" -Destination "elasticbeanstalk-deployment/"
       
-      # Create package.json for deployment
-      @'
+                    # Create package.json for deployment
+       @'
 {
   "name": "react-auth-demo",
   "version": "1.0.0",
@@ -97,10 +97,10 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
     "node": ">=20.0.0"
   }
 }
-'@ | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8
+'@ | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8NoBOM
       
-      # Create server.js for Elastic Beanstalk
-      @'
+                    # Create server.js for Elastic Beanstalk
+       @'
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -180,14 +180,14 @@ server.listen(port, hostname, () => {
 }).on('error', err => {
     console.error('Server error:', err);
 });
-'@ | Out-File -FilePath "elasticbeanstalk-deployment/server.js" -Encoding UTF8
+'@ | Out-File -FilePath "elasticbeanstalk-deployment/server.js" -Encoding UTF8NoBOM
       
       # Create Procfile for Elastic Beanstalk
-      "web: node server.js" | Out-File -FilePath "elasticbeanstalk-deployment/Procfile" -Encoding UTF8
+      "web: node server.js" | Out-File -FilePath "elasticbeanstalk-deployment/Procfile" -Encoding UTF8NoBOM
       
-      # Create .ebextensions for Nginx SPA routing
-      New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
-      @'
+                    # Create .ebextensions for Nginx SPA routing
+       New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
+       @'
 files:
   "/etc/nginx/conf.d/proxy.conf":
     mode: "000644"
@@ -211,7 +211,7 @@ files:
               proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
           }
       }
-'@ | Out-File -FilePath "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8
+'@ | Out-File -FilePath "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8NoBOM
       
              # Create deployment package with proper Unix paths
        # Use 7-Zip to create cross-platform ZIP files with proper directory separators
@@ -497,20 +497,13 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
   # Use the S3 deployment package
   version_label = aws_elastic_beanstalk_application_version.react_app_version.name
 
-           # Environment configuration
-         setting {
-           namespace = "aws:autoscaling:launchconfiguration"
-           name      = "IamInstanceProfile"
-           value     = aws_iam_instance_profile.elasticbeanstalk_profile.name
-         }
+                       # Environment configuration - Let Elastic Beanstalk manage IAM automatically
+            # Removed explicit IAM instance profile configuration to reduce complexity
          
 
 
-  setting {
-    namespace = "aws:autoscaling:launchconfiguration"
-    name      = "SecurityGroups"
-    value     = aws_security_group.elasticbeanstalk_sg.id
-  }
+  # Security Groups - Let Elastic Beanstalk manage automatically
+  # Removed explicit security group configuration to reduce complexity
 
   setting {
     namespace = "aws:autoscaling:launchconfiguration"
@@ -542,30 +535,8 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
     value     = aws_iam_role.elasticbeanstalk_service_role.name
   }
 
-  # VPC Configuration
-  setting {
-    namespace = "aws:ec2:vpc"
-    name      = "VPCId"
-    value     = aws_vpc.default.id
-  }
-
-  setting {
-    namespace = "aws:ec2:vpc"
-    name      = "Subnets"
-    value     = join(",", local.subnet_ids)
-  }
-
-  setting {
-    namespace = "aws:ec2:vpc"
-    name      = "ELBScheme"
-    value     = "public"
-  }
-
-  setting {
-    namespace = "aws:ec2:vpc"
-    name      = "ELBSubnets"
-    value     = join(",", local.subnet_ids)
-  }
+  # VPC Configuration - Let Elastic Beanstalk manage networking automatically
+  # Removed explicit VPC configuration to reduce complexity and potential conflicts
 
 
          
