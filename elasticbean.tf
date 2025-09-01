@@ -96,7 +96,8 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
                             node = ">=20.0.0"
                         }
                     } | ConvertTo-Json -Depth 10
-                                         $packageJson | Set-Content -Path "elasticbeanstalk-deployment/package.json" -Encoding UTF8 -NoNewline
+                                         # Write package.json without BOM using .NET method
+                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/package.json", $packageJson, [System.Text.Encoding]::UTF8)
       
                     # Create server.js for Elastic Beanstalk
                     $serverJs = @'
@@ -108,7 +109,7 @@ const hostname = '0.0.0.0';
 const port = process.env.PORT || 8080;
 
 const server = http.createServer((req, res) => {
-    let filePath = path.join(__dirname, 'build', req.url === '/' ? 'index.html' : req.url);
+    let filePath = path.join(__dirname, req.url === '/' ? 'index.html' : req.url);
     const extname = path.extname(filePath);
     const contentType = getContentType(extname);
 
@@ -125,7 +126,7 @@ const server = http.createServer((req, res) => {
     } else {
         // For SPA routing, serve index.html for all routes
         try {
-            const indexPath = path.join(__dirname, 'build', 'index.html');
+            const indexPath = path.join(__dirname, 'index.html');
             if (fs.existsSync(indexPath)) {
                 const content = fs.readFileSync(indexPath);
                 res.writeHead(200, {'Content-Type': 'text/html'});
@@ -175,15 +176,17 @@ function getContentType(extname) {
 
 server.listen(port, hostname, () => {
     console.log(`Server running at http://$${hostname}:$${port}/`);
-    console.log(`Serving files from: $${path.join(__dirname, 'build')}`);
+    console.log(`Serving files from: $${__dirname}`);
 }).on('error', err => {
     console.error('Server error:', err);
 });
 '@
-                                         $serverJs | Set-Content -Path "elasticbeanstalk-deployment/server.js" -Encoding UTF8 -NoNewline
+                                         # Write server.js without BOM using .NET method
+                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/server.js", $serverJs, [System.Text.Encoding]::UTF8)
       
       # Create Procfile for Elastic Beanstalk
-                           "web: node server.js" | Set-Content -Path "elasticbeanstalk-deployment/Procfile" -Encoding UTF8 -NoNewline
+                           # Write Procfile without BOM using .NET method
+              [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/Procfile", "web: node server.js", [System.Text.Encoding]::UTF8)
       
                     # Create .ebextensions for Nginx SPA routing
                     New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
@@ -212,7 +215,8 @@ files:
           }
       }
 '@
-                                         $nginxConfig | Set-Content -Path "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8 -NoNewline
+                                         # Write nginx config without BOM using .NET method
+                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config", $nginxConfig, [System.Text.Encoding]::UTF8)
       
              # Create deployment package with proper Unix paths
        # Use 7-Zip to create cross-platform ZIP files with proper directory separators
@@ -286,22 +290,51 @@ files:
        # Wait a moment for the file to be fully written
        Start-Sleep -Seconds 2
        
-       # Verify the ZIP file was created and is accessible
-       if (Test-Path "react-app-elasticbeanstalk.zip") {
-         $fileSize = (Get-Item "react-app-elasticbeanstalk.zip").Length
-         Write-Host "✅ Elastic Beanstalk deployment package created: react-app-elasticbeanstalk.zip (Size: $fileSize bytes)"
-         
-         # Test the ZIP file by listing its contents
-         try {
-           $zipContents = Get-ChildItem "react-app-elasticbeanstalk.zip" | Select-Object Name, Length
-           Write-Host "ZIP file contents: $zipContents"
-         } catch {
-           Write-Host "Warning: Could not verify ZIP contents, but file exists"
-         }
-       } else {
-         Write-Error "❌ Failed to create react-app-elasticbeanstalk.zip"
-         exit 1
-       }
+               # Verify the ZIP file was created and is accessible
+        if (Test-Path "react-app-elasticbeanstalk.zip") {
+          $fileSize = (Get-Item "react-app-elasticbeanstalk.zip").Length
+          Write-Host "✅ Elastic Beanstalk deployment package created: react-app-elasticbeanstalk.zip (Size: $fileSize bytes)"
+          
+          # Test the ZIP file by listing its contents
+          try {
+            $zipContents = Get-ChildItem "react-app-elasticbeanstalk.zip" | Select-Object Name, Length
+            Write-Host "ZIP file contents: $zipContents"
+          } catch {
+            Write-Host "Warning: Could not verify ZIP contents, but file exists"
+          }
+          
+          # DIAGNOSTIC: Check for BOM characters in the ZIP contents
+          Write-Host "🔍 Checking for BOM characters in ZIP contents..."
+          try {
+            # Extract and check package.json for BOM
+            $tempDir = "temp-check-bom"
+            if (Test-Path $tempDir) { Remove-Item -Recurse -Force $tempDir }
+            New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+            
+            # Use 7-Zip to extract just package.json
+            if ($sevenZipPath) {
+              & $sevenZipPath e "react-app-elasticbeanstalk.zip" "package.json" "-o$tempDir" "-y"
+              if (Test-Path "$tempDir/package.json") {
+                $content = Get-Content "$tempDir/package.json" -Raw -Encoding UTF8
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
+                if ($bytes.Length -gt 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+                  Write-Host "❌ BOM DETECTED in package.json! First 3 bytes: $($bytes[0..2] | ForEach-Object { '0x{0:X2}' -f $_ })"
+                } else {
+                  Write-Host "✅ No BOM detected in package.json. First 3 bytes: $($bytes[0..2] | ForEach-Object { '0x{0:X2}' -f $_ })"
+                }
+                Write-Host "Content preview: $($content.Substring(0, [Math]::Min(100, $content.Length)))"
+              }
+            }
+            
+            # Cleanup
+            if (Test-Path $tempDir) { Remove-Item -Recurse -Force $tempDir }
+          } catch {
+            Write-Host "Warning: Could not check for BOM characters: $_"
+          }
+        } else {
+          Write-Error "❌ Failed to create react-app-elasticbeanstalk.zip"
+          exit 1
+        }
     EOT
   }
 }
