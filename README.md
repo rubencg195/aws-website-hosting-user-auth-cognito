@@ -116,6 +116,20 @@ This comparison project teaches you:
 - **React.js Best Practices**: Authentication, routing, and deployment patterns
 - **Real-world Decision Making**: When to choose each hosting strategy based on your specific needs
 
+## 📋 Demo Images
+
+![Login](./images/deploy-amplify.png)
+
+
+![Login](./images/signin.png)
+
+
+![Login](./images/create-account.png)
+
+
+![Login](./images/authenticaded.png)
+
+
 ## 📋 Prerequisites
 
 Before you begin, ensure you have the following installed:
@@ -495,8 +509,9 @@ Before deploying, ensure you have:
 
 2. **Connect Git repository**:
    - Go to [AWS Amplify Console](https://console.aws.amazon.com/amplify/)
-   - Select your app and connect your Git repository
-   - Every push triggers automatic build and deploy
+   - Upload your code from S3
+
+   ![S3-Upload](./images/deploy-amplify.png)
 
 **💡 Pro Tip**: Perfect for team development with automatic deployments on every commit!
 
@@ -825,6 +840,55 @@ After working through all three hosting strategies, here's what we learned:
 ### 🚧 **Elastic Beanstalk Issues (Current State)**
 
 We're currently experiencing several challenges with the Elastic Beanstalk deployment:
+
+### 🔍 **Debugging Elastic Beanstalk Issues**
+
+When troubleshooting Elastic Beanstalk deployments, use these commands to gather information:
+
+#### **Check Environment Status**
+```bash
+# List all environments and their status
+aws elasticbeanstalk describe-environments --query 'Environments[*].{Name:EnvironmentName,Status:Status,Health:Health,HealthStatus:HealthStatus,EnvironmentId:EnvironmentId,VersionLabel:VersionLabel}' --output table
+
+# Get detailed status for specific environment
+aws elasticbeanstalk describe-environments --environment-names "react-auth-demo-dev-env" --query 'Environments[0].{Status:Status,Health:Health,HealthStatus:HealthStatus,VersionLabel:VersionLabel,EnvironmentId:EnvironmentId}' --output table
+```
+
+#### **Check Environment Events (Most Important)**
+```bash
+# Get recent events for troubleshooting (use environment ID for better results)
+aws elasticbeanstalk describe-events --environment-id "e-xxxxxxxxx" --max-items 15 --query 'Events[*].{Time:EventDate,Severity:Severity,Message:Message}' --output table
+
+# Alternative using environment name
+aws elasticbeanstalk describe-events --environment-name "react-auth-demo-dev-env" --max-items 15 --query 'Events[*].{Time:EventDate,Severity:Severity,Message:Message}' --output table
+```
+
+#### **Inspect Deployment Package**
+```bash
+# Check what's in your deployment zip file
+unzip -l react-app-elasticbeanstalk.zip
+
+# Extract and examine specific files
+unzip -p react-app-elasticbeanstalk.zip index.php
+unzip -p react-app-elasticbeanstalk.zip .ebextensions/02_nginx_spa.config
+```
+
+#### **Request Environment Logs (Advanced)**
+```bash
+# Request tail logs from the environment
+aws elasticbeanstalk request-environment-info --environment-name "react-auth-demo-dev-env" --info-type tail
+
+# Retrieve the logs (wait a few minutes after requesting)
+aws elasticbeanstalk retrieve-environment-info --environment-name "react-auth-demo-dev-env" --info-type tail
+```
+
+#### **Common Error Patterns**
+- **"Your source bundle has issues"** → Check deployment package structure and file conflicts
+- **"Instance deployment failed"** → Review environment events for specific error details  
+- **"Unable to assume role"** → Verify IAM roles and policies are correctly configured
+- **"VPC configuration errors"** → Check subnets, security groups, and internet gateway settings
+
+### 🚨 **Current Issues**
 
 #### **Platform Compatibility Issues**
 - **Problem**: Amazon Linux 2023 platform has limited Node.js container support

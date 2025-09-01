@@ -1,6 +1,63 @@
 # AWS Elastic Beanstalk Infrastructure
 # This file contains the Elastic Beanstalk environment for hosting the React.js app
 
+# Data sources
+data "aws_elastic_beanstalk_solution_stack" "php" {
+  most_recent = true
+  name_regex  = "64bit Amazon Linux 2023.*running PHP"
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# Local variables for configuration
+locals {
+  # Elastic Beanstalk configuration
+  solution_stack_name = data.aws_elastic_beanstalk_solution_stack.php.name
+  instance_type       = "t3.micro"
+  min_size           = 1
+  max_size           = 4
+  load_balancer_type = "classic"
+  service_role       = "aws-elasticbeanstalk-service-role"
+  
+  # Network configuration
+  vpc_cidr           = "10.0.0.0/16"
+  subnet_cidrs       = ["10.0.1.0/24", "10.0.2.0/24"]
+  availability_zones = slice(data.aws_availability_zones.available.names, 0, 2)
+  
+  # Port configuration
+  http_port  = 80
+  https_port = 443
+  ssh_port   = 22
+  app_port   = 8080
+  
+  # Health check configuration
+  health_check_interval    = 30
+  healthy_threshold_count  = 3
+  unhealthy_threshold_count = 5
+  
+  # Environment configuration
+  node_env = "production"
+  system_type = "enhanced"
+  
+  # Application configuration
+  app_name    = "react-auth-demo"
+  app_version = "1.0.0"
+  serve_version = "^14.2.1"
+  node_version = ">=20.0.0"
+  
+  # IAM policy ARNs
+  elasticbeanstalk_policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier"
+  cloudwatch_policy_arn      = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  
+  # Security group rules
+  allowed_cidr_blocks = ["0.0.0.0/0"]
+  
+  # Subnet IDs (computed after subnets are created)
+  subnet_ids = [aws_subnet.subnet_a.id, aws_subnet.subnet_b.id]
+}
+
 # Local build and deployment automation
 resource "null_resource" "elasticbeanstalk_build_and_deploy" {
   triggers = {
@@ -31,39 +88,13 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
         Remove-Item -Recurse -Force "elasticbeanstalk-deployment"
       }
       New-Item -ItemType Directory -Path "elasticbeanstalk-deployment" -Force | Out-Null
-      New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
       
-             # Copy build files
-       Copy-Item -Recurse "build/*" -Destination "elasticbeanstalk-deployment/"
-       # Only copy the nginx SPA configuration, not the build config
-       Copy-Item ".ebextensions/02_nginx_spa.config" -Destination "elasticbeanstalk-deployment/.ebextensions/"
-      
-             # Create Elastic Beanstalk specific package.json
+                    # Create a minimal test PHP file to verify platform works
        @'
- {
-   "name": "react-auth-demo",
-   "version": "1.0.0",
-   "scripts": {
-     "start": "serve -s . -l 8080"
-   },
-   "dependencies": {
-     "serve": "^14.2.1"
-   },
-   "engines": {
-     "node": ">=18.0.0"
-   }
- }
- '@ | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8
-       
-       # Create Procfile for Amazon Linux 2023
-       @'
- web: npm start
- '@ | Out-File -FilePath "elasticbeanstalk-deployment/Procfile" -Encoding UTF8
-       
-       # Install serve package in the deployment directory
-       Set-Location "elasticbeanstalk-deployment"
-       npm install --production
-       Set-Location ".."
+ <?php
+ phpinfo();
+ ?>
+ '@ | Out-File -FilePath "elasticbeanstalk-deployment/index.php" -Encoding UTF8
       
       # Create deployment archive using PowerShell
       Compress-Archive -Path "elasticbeanstalk-deployment/*" -DestinationPath "react-app-elasticbeanstalk.zip" -Force
@@ -121,7 +152,7 @@ resource "aws_s3_object" "elasticbeanstalk_deployment_package" {
   }
 }
 
-# IAM role for Elastic Beanstalk
+# IAM role for Elastic Beanstalk EC2 instances
 resource "aws_iam_role" "elasticbeanstalk_role" {
   name = "${local.project_name}-${local.environment}-elasticbeanstalk-role"
 
@@ -145,6 +176,30 @@ resource "aws_iam_role" "elasticbeanstalk_role" {
   }
 }
 
+# IAM role for Elastic Beanstalk service
+resource "aws_iam_role" "elasticbeanstalk_service_role" {
+  name = "aws-elasticbeanstalk-service-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "elasticbeanstalk.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "aws-elasticbeanstalk-service-role"
+    Environment = local.environment
+    Project     = local.project_name
+  }
+}
+
 # IAM instance profile for Elastic Beanstalk
 resource "aws_iam_instance_profile" "elasticbeanstalk_profile" {
   name = "${local.project_name}-${local.environment}-elasticbeanstalk-profile"
@@ -154,45 +209,57 @@ resource "aws_iam_instance_profile" "elasticbeanstalk_profile" {
 # IAM policy attachment for Elastic Beanstalk
 resource "aws_iam_role_policy_attachment" "elasticbeanstalk_policy" {
   role       = aws_iam_role.elasticbeanstalk_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier"
+  policy_arn = local.elasticbeanstalk_policy_arn
 }
 
 # IAM policy attachment for CloudWatch
 resource "aws_iam_role_policy_attachment" "elasticbeanstalk_cloudwatch_policy" {
   role       = aws_iam_role.elasticbeanstalk_role.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  policy_arn = local.cloudwatch_policy_arn
+}
+
+# IAM policy attachments for Elastic Beanstalk service role
+resource "aws_iam_role_policy_attachment" "elasticbeanstalk_service_policy" {
+  role       = aws_iam_role.elasticbeanstalk_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth"
+}
+
+resource "aws_iam_role_policy_attachment" "elasticbeanstalk_service_worker_policy" {
+  role       = aws_iam_role.elasticbeanstalk_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkService"
 }
 
 # Security group for Elastic Beanstalk
 resource "aws_security_group" "elasticbeanstalk_sg" {
   name        = "${local.project_name}-${local.environment}-elasticbeanstalk-sg"
   description = "Security group for Elastic Beanstalk environment"
+  vpc_id      = aws_vpc.default.id
 
   # HTTP access
   ingress {
     description = "HTTP from anywhere"
-    from_port   = 80
-    to_port     = 80
+    from_port   = local.http_port
+    to_port     = local.http_port
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = local.allowed_cidr_blocks
   }
 
   # HTTPS access
   ingress {
     description = "HTTPS from anywhere"
-    from_port   = 443
-    to_port     = 443
+    from_port   = local.https_port
+    to_port     = local.https_port
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = local.allowed_cidr_blocks
   }
 
   # SSH access (for debugging)
   ingress {
     description = "SSH from anywhere"
-    from_port   = 22
-    to_port     = 22
+    from_port   = local.ssh_port
+    to_port     = local.ssh_port
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = local.allowed_cidr_blocks
   }
 
   # All outbound traffic
@@ -200,7 +267,7 @@ resource "aws_security_group" "elasticbeanstalk_sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = local.allowed_cidr_blocks
   }
 
   tags = {
@@ -242,7 +309,7 @@ resource "aws_elastic_beanstalk_application_version" "react_app_version" {
 resource "aws_elastic_beanstalk_environment" "react_env" {
   name                = "${local.project_name}-${local.environment}-env"
   application         = aws_elastic_beanstalk_application.react_app.name
-  solution_stack_name = "64bit Amazon Linux 2 v5.8.0 running Node.js 18"
+  solution_stack_name = local.solution_stack_name
   
   # Use the S3 deployment package
   version_label = aws_elastic_beanstalk_application_version.react_app_version.name
@@ -265,31 +332,56 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
   setting {
     namespace = "aws:autoscaling:launchconfiguration"
     name      = "InstanceType"
-    value     = "t3.micro"
+    value     = local.instance_type
   }
 
   setting {
     namespace = "aws:autoscaling:asg"
     name      = "MinSize"
-    value     = "1"
+    value     = tostring(local.min_size)
   }
 
   setting {
     namespace = "aws:autoscaling:asg"
     name      = "MaxSize"
-    value     = "4"
+    value     = tostring(local.max_size)
   }
 
   setting {
     namespace = "aws:elasticbeanstalk:environment"
     name      = "LoadBalancerType"
-    value     = "classic"
+    value     = local.load_balancer_type
   }
 
-             setting {
+  setting {
     namespace = "aws:elasticbeanstalk:environment"
     name      = "ServiceRole"
-    value     = "aws-elasticbeanstalk-service-role"
+    value     = aws_iam_role.elasticbeanstalk_service_role.name
+  }
+
+  # VPC Configuration
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "VPCId"
+    value     = aws_vpc.default.id
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "Subnets"
+    value     = join(",", local.subnet_ids)
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "ELBScheme"
+    value     = "public"
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "ELBSubnets"
+    value     = join(",", local.subnet_ids)
   }
 
 
@@ -299,7 +391,7 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
   setting {
     namespace = "aws:elasticbeanstalk:application:environment"
     name      = "NODE_ENV"
-    value     = "production"
+    value     = local.node_env
   }
 
   setting {
@@ -330,7 +422,7 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
   setting {
     namespace = "aws:elasticbeanstalk:healthreporting:system"
     name      = "SystemType"
-    value     = "enhanced"
+    value     = local.system_type
   }
 
   # Load balancer configuration
@@ -343,26 +435,26 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
   setting {
     namespace = "aws:elasticbeanstalk:environment:process:default"
     name      = "HealthCheckInterval"
-    value     = "30"
+    value     = tostring(local.health_check_interval)
   }
 
   setting {
     namespace = "aws:elasticbeanstalk:environment:process:default"
     name      = "HealthyThresholdCount"
-    value     = "3"
+    value     = tostring(local.healthy_threshold_count)
   }
 
   setting {
     namespace = "aws:elasticbeanstalk:environment:process:default"
     name      = "UnhealthyThresholdCount"
-    value     = "5"
+    value     = tostring(local.unhealthy_threshold_count)
   }
 
   # Environment variables for React app
   setting {
     namespace = "aws:elasticbeanstalk:application:environment"
     name      = "PORT"
-    value     = "8080"
+    value     = tostring(local.app_port)
   }
 
 
@@ -376,7 +468,7 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
 
 # Create a default VPC for Elastic Beanstalk
 resource "aws_vpc" "default" {
-  cidr_block           = "10.0.0.0/16"
+  cidr_block           = local.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
 
@@ -411,8 +503,8 @@ resource "aws_route_table" "default" {
 # Create subnets in different AZs
 resource "aws_subnet" "subnet_a" {
   vpc_id                  = aws_vpc.default.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-east-1a"
+  cidr_block              = local.subnet_cidrs[0]
+  availability_zone       = local.availability_zones[0]
   map_public_ip_on_launch = true
 
   tags = {
@@ -422,8 +514,8 @@ resource "aws_subnet" "subnet_a" {
 
 resource "aws_subnet" "subnet_b" {
   vpc_id                  = aws_vpc.default.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "us-east-1b"
+  cidr_block              = local.subnet_cidrs[1]
+  availability_zone       = local.availability_zones[1]
   map_public_ip_on_launch = true
 
   tags = {
@@ -442,7 +534,3 @@ resource "aws_route_table_association" "subnet_b" {
   route_table_id = aws_route_table.default.id
 }
 
-# Local variables for subnet IDs
-locals {
-  subnet_ids = [aws_subnet.subnet_a.id, aws_subnet.subnet_b.id]
-}
