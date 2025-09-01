@@ -85,22 +85,21 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
       Copy-Item -Recurse "build/*" -Destination "elasticbeanstalk-deployment/"
       
                     # Create package.json for deployment
-       @'
-{
-  "name": "react-auth-demo",
-  "version": "1.0.0",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {},
-  "engines": {
-    "node": ">=20.0.0"
-  }
-}
-'@ | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8NoBOM
+                    $packageJson = @{
+                        name = "react-auth-demo"
+                        version = "1.0.0"
+                        scripts = @{
+                            start = "node server.js"
+                        }
+                        dependencies = @{}
+                        engines = @{
+                            node = ">=20.0.0"
+                        }
+                    } | ConvertTo-Json -Depth 10
+                    $packageJson | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8NoBOM
       
                     # Create server.js for Elastic Beanstalk
-       @'
+                    $serverJs = @'
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -180,14 +179,15 @@ server.listen(port, hostname, () => {
 }).on('error', err => {
     console.error('Server error:', err);
 });
-'@ | Out-File -FilePath "elasticbeanstalk-deployment/server.js" -Encoding UTF8NoBOM
+'@
+                    $serverJs | Out-File -FilePath "elasticbeanstalk-deployment/server.js" -Encoding UTF8NoBOM
       
       # Create Procfile for Elastic Beanstalk
       "web: node server.js" | Out-File -FilePath "elasticbeanstalk-deployment/Procfile" -Encoding UTF8NoBOM
       
                     # Create .ebextensions for Nginx SPA routing
-       New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
-       @'
+                    New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
+                    $nginxConfig = @'
 files:
   "/etc/nginx/conf.d/proxy.conf":
     mode: "000644"
@@ -211,7 +211,8 @@ files:
               proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
           }
       }
-'@ | Out-File -FilePath "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8NoBOM
+'@
+                    $nginxConfig | Out-File -FilePath "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8NoBOM
       
              # Create deployment package with proper Unix paths
        # Use 7-Zip to create cross-platform ZIP files with proper directory separators
@@ -236,33 +237,48 @@ files:
          }
        }
        
-       if ($sevenZipPath) {
-         Write-Host "Using 7-Zip to create cross-platform ZIP package..."
-         # Use 7-Zip with proper parameters for cross-platform compatibility
-         # a = archive, tzip = zip format, -mx=0 = no compression (faster)
-         # Use explicit file paths instead of wildcards to ensure proper path handling
-         # Create ZIP in current directory first, then move to parent
-         & $sevenZipPath a -tzip -mx=0 "react-app-elasticbeanstalk.zip" "index.html" "static" "asset-manifest.json" "manifest.json" "package.json" "server.js" "Procfile" ".ebextensions"
-         
-         if ($LASTEXITCODE -eq 0) {
-           # Move the ZIP file to parent directory
-           Move-Item "react-app-elasticbeanstalk.zip" ".." -Force
-           Write-Host "7-Zip ZIP package created successfully with proper Unix paths"
-         } else {
-           Write-Error "7-Zip failed, falling back to PowerShell Compress-Archive..."
-           # Fallback to PowerShell
-           Compress-Archive -Path "*" -DestinationPath "../react-app-elasticbeanstalk.zip" -Force
-         }
-       } else {
-         Write-Host "7-Zip not found, using PowerShell Compress-Archive (will have Windows path separators)..."
-         # Fallback to PowerShell
-         Compress-Archive -Path "*" -DestinationPath "../react-app-elasticbeanstalk.zip" -Force
-       }
-       
-       if ($LASTEXITCODE -ne 0) {
-         Write-Error "Failed to create ZIP package"
-         exit 1
-       }
+               if ($sevenZipPath) {
+          Write-Host "Using 7-Zip to create cross-platform ZIP package..."
+          # Use 7-Zip with proper parameters for cross-platform compatibility
+          # a = archive, tzip = zip format, -mx=0 = no compression (faster)
+          # Use explicit file paths instead of wildcards to ensure proper path handling
+          # Create ZIP in current directory first, then move to parent
+          & $sevenZipPath a -tzip -mx=0 "react-app-elasticbeanstalk.zip" "index.html" "static" "asset-manifest.json" "manifest.json" "package.json" "server.js" "Procfile" ".ebextensions"
+          
+          if ($LASTEXITCODE -eq 0) {
+            # Move the ZIP file to parent directory
+            Move-Item "react-app-elasticbeanstalk.zip" ".." -Force
+            Write-Host "7-Zip ZIP package created successfully with proper Unix paths"
+            $zipCreated = $true
+          } else {
+            Write-Host "7-Zip failed, falling back to PowerShell Compress-Archive..."
+            # Fallback to PowerShell
+            try {
+              Compress-Archive -Path "*" -DestinationPath "../react-app-elasticbeanstalk.zip" -Force
+              $zipCreated = $true
+              Write-Host "PowerShell Compress-Archive succeeded"
+            } catch {
+              Write-Error "PowerShell Compress-Archive also failed: $_"
+              $zipCreated = $false
+            }
+          }
+        } else {
+          Write-Host "7-Zip not found, using PowerShell Compress-Archive (will have Windows path separators)..."
+          # Fallback to PowerShell
+          try {
+            Compress-Archive -Path "*" -DestinationPath "../react-app-elasticbeanstalk.zip" -Force
+            $zipCreated = $true
+            Write-Host "PowerShell Compress-Archive succeeded"
+          } catch {
+            Write-Error "PowerShell Compress-Archive failed: $_"
+            $zipCreated = $false
+          }
+        }
+        
+        if (-not $zipCreated) {
+          Write-Error "Failed to create ZIP package"
+          exit 1
+        }
        
        # Return to parent directory
        Set-Location ".."
