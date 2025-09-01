@@ -97,7 +97,8 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
                         }
                     } | ConvertTo-Json -Depth 10
                                          # Write package.json without BOM using .NET method
-                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/package.json", $packageJson, [System.Text.Encoding]::UTF8)
+                     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/package.json", $packageJson, $utf8NoBom)
       
                     # Create server.js for Elastic Beanstalk
                     $serverJs = @'
@@ -182,11 +183,13 @@ server.listen(port, hostname, () => {
 });
 '@
                                          # Write server.js without BOM using .NET method
-                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/server.js", $serverJs, [System.Text.Encoding]::UTF8)
+                     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/server.js", $serverJs, $utf8NoBom)
       
       # Create Procfile for Elastic Beanstalk
                            # Write Procfile without BOM using .NET method
-              [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/Procfile", "web: node server.js", [System.Text.Encoding]::UTF8)
+              $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+              [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/Procfile", "web: node server.js", $utf8NoBom)
       
                     # Create .ebextensions for Nginx SPA routing
                     New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
@@ -216,7 +219,8 @@ files:
       }
 '@
                                          # Write nginx config without BOM using .NET method
-                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config", $nginxConfig, [System.Text.Encoding]::UTF8)
+                     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+                     [System.IO.File]::WriteAllText("elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config", $nginxConfig, $utf8NoBom)
       
              # Create deployment package with proper Unix paths
        # Use 7-Zip to create cross-platform ZIP files with proper directory separators
