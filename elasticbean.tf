@@ -96,7 +96,7 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
                             node = ">=20.0.0"
                         }
                     } | ConvertTo-Json -Depth 10
-                                         $packageJson | Set-Content -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8 -NoNewline
+                                         $packageJson | Set-Content -Path "elasticbeanstalk-deployment/package.json" -Encoding UTF8 -NoNewline
       
                     # Create server.js for Elastic Beanstalk
                     $serverJs = @'
@@ -180,10 +180,10 @@ server.listen(port, hostname, () => {
     console.error('Server error:', err);
 });
 '@
-                                         $serverJs | Set-Content -FilePath "elasticbeanstalk-deployment/server.js" -Encoding UTF8 -NoNewline
+                                         $serverJs | Set-Content -Path "elasticbeanstalk-deployment/server.js" -Encoding UTF8 -NoNewline
       
       # Create Procfile for Elastic Beanstalk
-             "web: node server.js" | Set-Content -FilePath "elasticbeanstalk-deployment/Procfile" -Encoding UTF8 -NoNewline
+                           "web: node server.js" | Set-Content -Path "elasticbeanstalk-deployment/Procfile" -Encoding UTF8 -NoNewline
       
                     # Create .ebextensions for Nginx SPA routing
                     New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
@@ -212,7 +212,7 @@ files:
           }
       }
 '@
-                                         $nginxConfig | Set-Content -FilePath "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8 -NoNewline
+                                         $nginxConfig | Set-Content -Path "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8 -NoNewline
       
              # Create deployment package with proper Unix paths
        # Use 7-Zip to create cross-platform ZIP files with proper directory separators
@@ -513,13 +513,20 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
   # Use the S3 deployment package
   version_label = aws_elastic_beanstalk_application_version.react_app_version.name
 
-                       # Environment configuration - Let Elastic Beanstalk manage IAM automatically
-            # Removed explicit IAM instance profile configuration to reduce complexity
+                                               # Environment configuration
+                        setting {
+                          namespace = "aws:autoscaling:launchconfiguration"
+                          name      = "IamInstanceProfile"
+                          value     = aws_iam_instance_profile.elasticbeanstalk_profile.name
+                        }
          
 
 
-  # Security Groups - Let Elastic Beanstalk manage automatically
-  # Removed explicit security group configuration to reduce complexity
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "SecurityGroups"
+    value     = aws_security_group.elasticbeanstalk_sg.id
+  }
 
   setting {
     namespace = "aws:autoscaling:launchconfiguration"
