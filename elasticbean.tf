@@ -2,9 +2,9 @@
 # This file contains the Elastic Beanstalk environment for hosting the React.js app
 
 # Data sources
-data "aws_elastic_beanstalk_solution_stack" "php" {
+data "aws_elastic_beanstalk_solution_stack" "nodejs" {
   most_recent = true
-  name_regex  = "64bit Amazon Linux 2023.*running PHP"
+  name_regex  = "64bit Amazon Linux 2023.*running Node.js 20"
 }
 
 data "aws_availability_zones" "available" {
@@ -14,7 +14,7 @@ data "aws_availability_zones" "available" {
 # Local variables for configuration
 locals {
   # Elastic Beanstalk configuration
-  solution_stack_name = data.aws_elastic_beanstalk_solution_stack.php.name
+  solution_stack_name = data.aws_elastic_beanstalk_solution_stack.nodejs.name
   instance_type       = "t3.micro"
   min_size           = 1
   max_size           = 4
@@ -89,12 +89,30 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
       }
       New-Item -ItemType Directory -Path "elasticbeanstalk-deployment" -Force | Out-Null
       
-                    # Create a minimal test PHP file to verify platform works
+                    # Copy React build files
+       Copy-Item -Recurse "build/*" -Destination "elasticbeanstalk-deployment/"
+       
+       # Create package.json for Node.js deployment
        @'
- <?php
- phpinfo();
- ?>
- '@ | Out-File -FilePath "elasticbeanstalk-deployment/index.php" -Encoding UTF8
+ {
+   "name": "${local.app_name}",
+   "version": "${local.app_version}",
+   "scripts": {
+     "start": "serve -s . -l ${local.app_port}"
+   },
+   "dependencies": {
+     "serve": "${local.serve_version}"
+   },
+   "engines": {
+     "node": "${local.node_version}"
+   }
+ }
+ '@ | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8
+ 
+       # Install serve package
+       Set-Location "elasticbeanstalk-deployment"
+       npm install --production
+       Set-Location ".."
       
       # Create deployment archive using PowerShell
       Compress-Archive -Path "elasticbeanstalk-deployment/*" -DestinationPath "react-app-elasticbeanstalk.zip" -Force
