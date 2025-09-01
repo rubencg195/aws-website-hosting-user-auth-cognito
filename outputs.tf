@@ -45,6 +45,27 @@ output "cognito_domain" {
   value       = aws_cognito_user_pool_domain.main.domain
 }
 
+# Elastic Beanstalk Outputs
+output "elasticbeanstalk_app_name" {
+  description = "Elastic Beanstalk application name"
+  value       = aws_elastic_beanstalk_application.react_app.name
+}
+
+output "elasticbeanstalk_env_name" {
+  description = "Elastic Beanstalk environment name"
+  value       = aws_elastic_beanstalk_environment.react_env.name
+}
+
+output "elasticbeanstalk_cname" {
+  description = "Elastic Beanstalk environment CNAME"
+  value       = aws_elastic_beanstalk_environment.react_env.cname
+}
+
+output "elasticbeanstalk_endpoint_url" {
+  description = "Elastic Beanstalk environment endpoint URL"
+  value       = "http://${aws_elastic_beanstalk_environment.react_env.cname}"
+}
+
 # AWS Account Information
 output "aws_account_id" {
   description = "AWS Account ID"
