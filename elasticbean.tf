@@ -96,7 +96,7 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
                             node = ">=20.0.0"
                         }
                     } | ConvertTo-Json -Depth 10
-                    $packageJson | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8NoBOM
+                                         $packageJson | Set-Content -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8 -NoNewline
       
                     # Create server.js for Elastic Beanstalk
                     $serverJs = @'
@@ -180,10 +180,10 @@ server.listen(port, hostname, () => {
     console.error('Server error:', err);
 });
 '@
-                    $serverJs | Out-File -FilePath "elasticbeanstalk-deployment/server.js" -Encoding UTF8NoBOM
+                                         $serverJs | Set-Content -FilePath "elasticbeanstalk-deployment/server.js" -Encoding UTF8 -NoNewline
       
       # Create Procfile for Elastic Beanstalk
-      "web: node server.js" | Out-File -FilePath "elasticbeanstalk-deployment/Procfile" -Encoding UTF8NoBOM
+             "web: node server.js" | Set-Content -FilePath "elasticbeanstalk-deployment/Procfile" -Encoding UTF8 -NoNewline
       
                     # Create .ebextensions for Nginx SPA routing
                     New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
@@ -212,7 +212,7 @@ files:
           }
       }
 '@
-                    $nginxConfig | Out-File -FilePath "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8NoBOM
+                                         $nginxConfig | Set-Content -FilePath "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8 -NoNewline
       
              # Create deployment package with proper Unix paths
        # Use 7-Zip to create cross-platform ZIP files with proper directory separators
@@ -551,13 +551,33 @@ resource "aws_elastic_beanstalk_environment" "react_env" {
     value     = aws_iam_role.elasticbeanstalk_service_role.name
   }
 
-  # VPC Configuration - Let Elastic Beanstalk manage networking automatically
-  # Removed explicit VPC configuration to reduce complexity and potential conflicts
+  # VPC Configuration
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "VPCId"
+    value     = aws_vpc.default.id
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "Subnets"
+    value     = join(",", local.subnet_ids)
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "ELBScheme"
+    value     = "public"
+  }
+
+  setting {
+    namespace = "aws:ec2:vpc"
+    name      = "ELBSubnets"
+    value     = join(",", local.subnet_ids)
+  }
 
 
-         
-
-
+      
   setting {
     namespace = "aws:elasticbeanstalk:application:environment"
     name      = "NODE_ENV"
