@@ -72,55 +72,220 @@ resource "null_resource" "elasticbeanstalk_build_and_deploy" {
     command = <<-EOT
       Write-Host "🚀 Building React app for Elastic Beanstalk..."
       
-      # Clean previous build
-      if (Test-Path "build") {
-        Remove-Item -Recurse -Force "build"
-      }
-      
-      # Install dependencies
-      npm ci
-      
-      # Build the React app
-      npm run build
-      
-      # Create deployment directory
+      # Clean up previous builds
       if (Test-Path "elasticbeanstalk-deployment") {
         Remove-Item -Recurse -Force "elasticbeanstalk-deployment"
       }
       New-Item -ItemType Directory -Path "elasticbeanstalk-deployment" -Force | Out-Null
       
-                    # Copy React build files
-       Copy-Item -Recurse "build/*" -Destination "elasticbeanstalk-deployment/"
-       
-       # Create package.json for Node.js deployment
-       @'
- {
-   "name": "${local.app_name}",
-   "version": "${local.app_version}",
-   "scripts": {
-     "start": "serve -s . -l ${local.app_port}"
-   },
-   "dependencies": {
-     "serve": "${local.serve_version}"
-   },
-   "engines": {
-     "node": "${local.node_version}"
-   }
- }
- '@ | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8
- 
-       # Install serve package
+      # Build the React app
+      npm run build
+      
+      # Copy build files to deployment directory
+      Copy-Item -Recurse "build/*" -Destination "elasticbeanstalk-deployment/"
+      
+      # Create package.json for deployment
+      @'
+{
+  "name": "react-auth-demo",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+'@ | Out-File -FilePath "elasticbeanstalk-deployment/package.json" -Encoding UTF8
+      
+      # Create server.js for Elastic Beanstalk
+      @'
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+const hostname = '0.0.0.0';
+const port = process.env.PORT || 8080;
+
+const server = http.createServer((req, res) => {
+    let filePath = path.join(__dirname, 'build', req.url === '/' ? 'index.html' : req.url);
+    const extname = path.extname(filePath);
+    const contentType = getContentType(extname);
+
+    if (fs.existsSync(filePath)) {
+        try {
+            const content = fs.readFileSync(filePath);
+            res.writeHead(200, {'Content-Type': contentType});
+            res.end(content);
+        } catch (err) {
+            console.error('Error reading file:', err);
+            res.writeHead(500);
+            res.end('Server Error');
+        }
+    } else {
+        // For SPA routing, serve index.html for all routes
+        try {
+            const indexPath = path.join(__dirname, 'build', 'index.html');
+            if (fs.existsSync(indexPath)) {
+                const content = fs.readFileSync(indexPath);
+                res.writeHead(200, {'Content-Type': 'text/html'});
+                res.end(content);
+            } else {
+                res.writeHead(404);
+                res.end('Not Found');
+            }
+        } catch (err) {
+            console.error('Error serving index.html:', err);
+            res.writeHead(500);
+            res.end('Server Error');
+        }
+    }
+});
+
+function getContentType(extname) {
+    switch (extname) {
+        case '.js':
+            return 'text/javascript';
+        case '.css':
+            return 'text/css';
+        case '.json':
+            return 'application/json';
+        case '.png':
+            return 'image/png';
+        case '.jpg':
+            return 'image/jpeg';
+        case '.gif':
+            return 'image/gif';
+        case '.svg':
+            return 'image/svg+xml';
+        case '.ico':
+            return 'image/x-icon';
+        case '.woff':
+            return 'font/woff';
+        case '.woff2':
+            return 'font/woff2';
+        case '.ttf':
+            return 'font/ttf';
+        case '.eot':
+            return 'application/vnd.ms-fontobject';
+        default:
+            return 'text/html';
+    }
+}
+
+server.listen(port, hostname, () => {
+    console.log(`Server running at http://$${hostname}:$${port}/`);
+    console.log(`Serving files from: $${path.join(__dirname, 'build')}`);
+}).on('error', err => {
+    console.error('Server error:', err);
+});
+'@ | Out-File -FilePath "elasticbeanstalk-deployment/server.js" -Encoding UTF8
+      
+      # Create Procfile for Elastic Beanstalk
+      "web: node server.js" | Out-File -FilePath "elasticbeanstalk-deployment/Procfile" -Encoding UTF8
+      
+      # Create .ebextensions for Nginx SPA routing
+      New-Item -ItemType Directory -Path "elasticbeanstalk-deployment/.ebextensions" -Force | Out-Null
+      @'
+files:
+  "/etc/nginx/conf.d/proxy.conf":
+    mode: "000644"
+    owner: root
+    group: root
+    content: |
+      upstream nodejs {
+          server 127.0.0.1:8080;
+          keepalive 256;
+      }
+      
+      server {
+          listen 80;
+          
+          location / {
+              proxy_pass  http://nodejs;
+              proxy_set_header   Connection "";
+              proxy_http_version 1.1;
+              proxy_set_header        Host            $host;
+              proxy_set_header        X-Real-IP       $remote_addr;
+              proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+          }
+      }
+'@ | Out-File -FilePath "elasticbeanstalk-deployment/.ebextensions/02_nginx_spa.config" -Encoding UTF8
+      
+             # Create deployment package with proper Unix paths
+       # Use 7-Zip to create cross-platform ZIP files with proper directory separators
+       # Change to deployment directory and create ZIP from there
        Set-Location "elasticbeanstalk-deployment"
-       npm install --production
+       
+       # Try to use 7-Zip if available, fallback to PowerShell Compress-Archive
+       $sevenZipPath = $null
+       
+               # Check common 7-Zip installation paths
+        $possiblePaths = @(
+          'C:\Program Files\7-Zip\7z.exe',
+          'C:\Program Files (x86)\7-Zip\7z.exe',
+          "$env:ProgramFiles\7-Zip\7z.exe",
+          "$env:ProgramFiles(x86)\7-Zip\7z.exe"
+        )
+       
+       foreach ($path in $possiblePaths) {
+         if (Test-Path $path) {
+           $sevenZipPath = $path
+           break
+         }
+       }
+       
+       if ($sevenZipPath) {
+         Write-Host "Using 7-Zip to create cross-platform ZIP package..."
+         # Use 7-Zip with proper parameters for cross-platform compatibility
+         # a = archive, tzip = zip format, -mx=0 = no compression (faster)
+         # Use explicit file paths instead of wildcards to ensure proper path handling
+         # Create ZIP in current directory first, then move to parent
+         & $sevenZipPath a -tzip -mx=0 "react-app-elasticbeanstalk.zip" "index.html" "static" "asset-manifest.json" "manifest.json" "package.json" "server.js" "Procfile" ".ebextensions"
+         
+         if ($LASTEXITCODE -eq 0) {
+           # Move the ZIP file to parent directory
+           Move-Item "react-app-elasticbeanstalk.zip" ".." -Force
+           Write-Host "7-Zip ZIP package created successfully with proper Unix paths"
+         } else {
+           Write-Error "7-Zip failed, falling back to PowerShell Compress-Archive..."
+           # Fallback to PowerShell
+           Compress-Archive -Path "*" -DestinationPath "../react-app-elasticbeanstalk.zip" -Force
+         }
+       } else {
+         Write-Host "7-Zip not found, using PowerShell Compress-Archive (will have Windows path separators)..."
+         # Fallback to PowerShell
+         Compress-Archive -Path "*" -DestinationPath "../react-app-elasticbeanstalk.zip" -Force
+       }
+       
+       if ($LASTEXITCODE -ne 0) {
+         Write-Error "Failed to create ZIP package"
+         exit 1
+       }
+       
+       # Return to parent directory
        Set-Location ".."
-      
-      # Create deployment archive using PowerShell
-      Compress-Archive -Path "elasticbeanstalk-deployment/*" -DestinationPath "react-app-elasticbeanstalk.zip" -Force
-      
-      # Clean up deployment directory
-      Remove-Item -Recurse -Force "elasticbeanstalk-deployment"
-      
-      Write-Host "✅ Elastic Beanstalk deployment package created: react-app-elasticbeanstalk.zip"
+       
+       # Wait a moment for the file to be fully written
+       Start-Sleep -Seconds 2
+       
+       # Verify the ZIP file was created and is accessible
+       if (Test-Path "react-app-elasticbeanstalk.zip") {
+         $fileSize = (Get-Item "react-app-elasticbeanstalk.zip").Length
+         Write-Host "✅ Elastic Beanstalk deployment package created: react-app-elasticbeanstalk.zip (Size: $fileSize bytes)"
+         
+         # Test the ZIP file by listing its contents
+         try {
+           $zipContents = Get-ChildItem "react-app-elasticbeanstalk.zip" | Select-Object Name, Length
+           Write-Host "ZIP file contents: $zipContents"
+         } catch {
+           Write-Host "Warning: Could not verify ZIP contents, but file exists"
+         }
+       } else {
+         Write-Error "❌ Failed to create react-app-elasticbeanstalk.zip"
+         exit 1
+       }
     EOT
   }
 }
@@ -154,7 +319,7 @@ resource "aws_s3_bucket_public_access_block" "elasticbeanstalk_deployment" {
   restrict_public_buckets = true
 }
 
-# S3 object for the deployment package
+# S3 object for the deployment package (ZIP file - Elastic Beanstalk requirement)
 resource "aws_s3_object" "elasticbeanstalk_deployment_package" {
   bucket = aws_s3_bucket.elasticbeanstalk_deployment.id
   key    = "react-app-elasticbeanstalk.zip"

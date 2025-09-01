@@ -65,3 +65,6 @@ jspm_packages/
 # dotenv environment variables file
 .env
 react-app-elasticbeanstalk.zip
+react-app-elasticbeanstalk.tar.gz
+elasticbeanstalk-deployment/
+
