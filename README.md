@@ -308,8 +308,8 @@ git add . && git commit -m "update" && git push
 The deployment scripts automatically create a `.env` file with:
 ```bash
 REACT_APP_AWS_REGION=us-east-1
-REACT_APP_USER_POOL_ID=us-east-1_DhtukDlTR
-REACT_APP_USER_POOL_CLIENT_ID=3gi06h3n36cvgqt5g5ljeb39fe
+REACT_APP_USER_POOL_ID=*{INSERT_VALUE_HERE}*
+REACT_APP_USER_POOL_CLIENT_ID=*{INSERT_VALUE_HERE}*
 REACT_APP_COGNITO_DOMAIN=react-auth-demo-dev
 ```
 
